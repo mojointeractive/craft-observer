@@ -6,6 +6,7 @@ namespace mojo\observer\controllers;
 
 use Craft;
 use craft\web\Controller;
+use mojo\observer\forms\FormAdapter;
 use mojo\observer\forms\FormAdapters;
 use mojo\observer\health\HealthReport;
 use mojo\observer\Observer;
@@ -14,7 +15,9 @@ use mojo\observer\providers\PlatformProvider;
 use mojo\observer\providers\Providers;
 use mojo\observer\security\CacheNonceStore;
 use mojo\observer\security\RequestAuthenticator;
+use mojo\observer\testing\RunReport;
 use mojo\observer\vitals\Vitals;
+use yii\web\BadRequestHttpException;
 use yii\web\HttpException;
 use yii\web\NotFoundHttpException;
 use yii\web\Response;
@@ -99,6 +102,40 @@ class ApiController extends Controller
         $doctor = new CraftlyDoctorProvider();
 
         return $this->asJson(HealthReport::fromDoctor($doctor->available() ? $doctor->collect()['checks'] : [], time()));
+    }
+
+    /** POST {"run": "<id>", "adapter": "formie"}: the run's submission and notifications, or found: false. */
+    public function actionFormTestRun(): Response
+    {
+        [$adapter, $run] = $this->formTestRequest();
+
+        return $this->asJson($adapter->report($run) ?? RunReport::notFound());
+    }
+
+    /** POST {"run": "<id>", "adapter": "formie"}: deletes the run's submission once its mail is out. */
+    public function actionFormTestCleanup(): Response
+    {
+        [$adapter, $run] = $this->formTestRequest();
+
+        return $this->asJson($adapter->cleanUp($run));
+    }
+
+    /** @return array{FormAdapter, string} */
+    private function formTestRequest(): array
+    {
+        $this->requirePostRequest();
+        $body = json_decode(Craft::$app->getRequest()->getRawBody(), true);
+        $run = is_array($body) ? ($body['run'] ?? null) : null;
+        $handle = is_array($body) ? ($body['adapter'] ?? 'formie') : 'formie';
+        if (!is_string($run) || preg_match('/^[0-9a-f]{32}$/', $run) !== 1 || !is_string($handle)) {
+            throw new BadRequestHttpException('Expected {"run": "<32 hex characters>"}.');
+        }
+        $adapter = FormAdapters::get($handle);
+        if ($adapter === null) {
+            throw new NotFoundHttpException("No form adapter \"$handle\" on this site.");
+        }
+
+        return [$adapter, $run];
     }
 
     public function actionFormieForms(): Response

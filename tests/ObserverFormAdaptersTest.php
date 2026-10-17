@@ -55,6 +55,16 @@ final class ObserverFormAdaptersTest extends TestCase
             public function refuseTests(string $reason): void
             {
             }
+
+            public function report(string $run): ?array
+            {
+                return null;
+            }
+
+            public function cleanUp(string $run): array
+            {
+                return ['deleted' => false, 'reason' => 'not found'];
+            }
         };
     }
 

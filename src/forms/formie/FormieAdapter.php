@@ -11,9 +11,11 @@ use craft\mail\Message;
 use DateTime;
 use mojo\observer\forms\FormAdapter;
 use mojo\observer\testing\MailRouting;
+use mojo\observer\testing\RunReport;
 use mojo\observer\testing\TestToken;
 use verbb\formie\base\Captcha;
 use verbb\formie\elements\Form;
+use verbb\formie\elements\SentNotification;
 use verbb\formie\elements\Submission;
 use verbb\formie\enums\workflow\Stage;
 use verbb\formie\enums\workflow\Task;
@@ -44,6 +46,9 @@ final class FormieAdapter implements FormAdapter
 
     /** Where the run lives in the submission's custom metadata, read again in queue jobs. */
     public const METADATA_KEY = 'observer';
+
+    /** How long cleanup waits for queued notifications before deleting anyway. */
+    public const PENDING_NOTIFICATIONS_SECONDS = 900;
 
     public function handle(): string
     {
@@ -133,6 +138,74 @@ final class FormieAdapter implements FormAdapter
                 $event->isValid = false;
             }
         });
+    }
+
+    public function report(string $run): ?array
+    {
+        $submission = self::runSubmission($run);
+        if ($submission === null) {
+            return null;
+        }
+        $sent = self::sentNotifications($submission);
+
+        return RunReport::shape([
+            'uid' => (string)$submission->uid,
+            'dateCreated' => (string)$submission->dateCreated?->format(DATE_ATOM),
+            'isSpam' => $submission->isSpam,
+            'spamReason' => $submission->spamReason,
+            'isIncomplete' => $submission->isIncomplete,
+            'values' => $submission->getValuesAsArray(),
+        ], array_map(static fn (SentNotification $notification): array => [
+            'name' => $notification->title,
+            'subject' => $notification->subject,
+            'success' => $notification->success,
+            'message' => $notification->message ?? null,
+            'to' => $notification->to,
+            'cc' => $notification->cc,
+            'bcc' => $notification->bcc,
+            'dateCreated' => $notification->dateCreated?->format(DATE_ATOM),
+        ], $sent), self::testOf($submission)['probe'] ?? '', count($submission->getForm()?->getEnabledNotifications() ?? []));
+    }
+
+    public function cleanUp(string $run): array
+    {
+        $submission = self::runSubmission($run);
+        if ($submission === null) {
+            return ['deleted' => false, 'reason' => 'not found'];
+        }
+        $sent = self::sentNotifications($submission);
+        $expected = count($submission->getForm()?->getEnabledNotifications() ?? []);
+        $age = time() - ($submission->dateCreated?->getTimestamp() ?? 0);
+        if (count($sent) < $expected && $age < self::PENDING_NOTIFICATIONS_SECONDS) {
+            return ['deleted' => false, 'reason' => 'notifications pending'];
+        }
+
+        /** @var \craft\web\Application|\craft\console\Application $app */
+        $app = Craft::$app;
+        $elements = $app->getElements();
+        // Sent notifications first: deleting the submission would only null their submission id.
+        foreach ($sent as $notification) {
+            $elements->deleteElement($notification, true);
+        }
+
+        return ['deleted' => $elements->deleteElement($submission, true)];
+    }
+
+    /** The run's submission in any state: complete, incomplete or spam. */
+    private static function runSubmission(string $run): ?Submission
+    {
+        $submission = Submission::find()->title(self::TITLE_PREFIX . $run)->status(null)->isSpam(null)->isIncomplete(null)->one();
+
+        return $submission instanceof Submission ? $submission : null;
+    }
+
+    /** @return list<SentNotification> */
+    private static function sentNotifications(Submission $submission): array
+    {
+        /** @var list<SentNotification> $sent */
+        $sent = SentNotification::find()->submissionId($submission->id)->status(null)->all();
+
+        return $sent;
     }
 
     /** The submission a run made, when the run got as far as a complete one. */

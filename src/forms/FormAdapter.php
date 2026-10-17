@@ -39,4 +39,20 @@ interface FormAdapter
 
     /** This request carries a test token that does not verify: submit nothing. */
     public function refuseTests(string $reason): void;
+
+    /**
+     * The run's submission and the notifications sent for it (testing\RunReport::shape()), or null
+     * when the run made no submission.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function report(string $run): ?array;
+
+    /**
+     * Deletes the run's submission and what was sent for it, unless its notifications are still on
+     * their way.
+     *
+     * @return array{deleted: bool, reason?: string}
+     */
+    public function cleanUp(string $run): array;
 }
