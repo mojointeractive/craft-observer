@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace mojo\observer\forms;
 
+use mojo\observer\testing\TestToken;
+
 /**
  * How one form plugin's forms reach observer. The plugin brings one for Formie (formie/FormieAdapter);
  * another form plugin adds its own through Observer::EVENT_REGISTER_FORM_ADAPTERS.
@@ -22,4 +24,19 @@ interface FormAdapter
      * @return array<string, mixed>
      */
     public function inventory(): array;
+
+    /**
+     * Hooks for every request, queue jobs included, that act on test submissions already saved:
+     * keep them away from integrations, send their notifications where the test says.
+     */
+    public function listen(): void;
+
+    /**
+     * This request carries a valid test token for one of this adapter's forms: let that form's
+     * submission through captchas and guards, and mark it as the token's run.
+     */
+    public function startTest(TestToken $token): void;
+
+    /** This request carries a test token that does not verify: submit nothing. */
+    public function refuseTests(string $reason): void;
 }

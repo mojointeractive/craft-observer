@@ -7,6 +7,7 @@ use mojo\observer\forms\FormAdapters;
 use mojo\observer\forms\RegisterFormAdaptersEvent;
 use mojo\observer\Observer;
 use mojo\observer\providers\CraftlyDoctorProvider;
+use mojo\observer\testing\TestToken;
 use PHPUnit\Framework\TestCase;
 use yii\base\Event;
 
@@ -41,6 +42,18 @@ final class ObserverFormAdaptersTest extends TestCase
             public function inventory(): array
             {
                 return ['forms' => [['handle' => $this->handle . 'Contact']]];
+            }
+
+            public function listen(): void
+            {
+            }
+
+            public function startTest(TestToken $token): void
+            {
+            }
+
+            public function refuseTests(string $reason): void
+            {
             }
         };
     }
