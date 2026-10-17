@@ -12,6 +12,7 @@ use DateTime;
 use mojo\observer\forms\FormAdapter;
 use mojo\observer\testing\MailRouting;
 use mojo\observer\testing\RunReport;
+use mojo\observer\testing\RunRouting;
 use mojo\observer\testing\TestToken;
 use verbb\formie\base\Captcha;
 use verbb\formie\elements\Form;
@@ -40,12 +41,6 @@ final class FormieAdapter implements FormAdapter
 {
     /** The oldest Formie this adapter knows. */
     public const MIN_FORMIE_VERSION = '4.0.0-alpha';
-
-    /** A test submission's title is this and the run id: it finds the run's submission. */
-    public const TITLE_PREFIX = 'observer:';
-
-    /** Where the run lives in the submission's custom metadata, read again in queue jobs. */
-    public const METADATA_KEY = 'observer';
 
     /** How long cleanup waits for queued notifications before deleting anyway. */
     public const PENDING_NOTIFICATIONS_SECONDS = 900;
@@ -77,17 +72,26 @@ final class FormieAdapter implements FormAdapter
 
     public function listen(): void
     {
-        // Integrations run in queue jobs: the saved metadata says the submission is a test.
+        // Integrations and notifications run in queue jobs: the submission's title says it is a test.
         Event::on(Integrations::class, Integrations::EVENT_BEFORE_TRIGGER_INTEGRATION, static function (TriggerIntegrationEvent $event): void {
-            if ($event->submission !== null && self::testOf($event->submission) !== null) {
+            if (RunRouting::runOf($event->submission?->title) !== null) {
                 $event->isValid = false;
             }
         });
         Event::on(Emails::class, Emails::EVENT_BEFORE_SEND_MAIL, static function (MailEvent $event): void {
-            $test = $event->submission !== null ? self::testOf($event->submission) : null;
-            if ($test !== null && $event->email instanceof Message) {
-                self::route($event->email, $test);
+            $run = RunRouting::runOf($event->submission?->title);
+            if ($run === null) {
+                return;
             }
+            $routing = self::routing()->of($run);
+            if ($routing === null || !$event->email instanceof Message) {
+                // Rather no mail than one to the client: Formie saves it as a failed notification.
+                Craft::warning("observer: held back a notification of test run $run, its mail routing is gone.", __METHOD__);
+                $event->isValid = false;
+
+                return;
+            }
+            self::route($event->email, $run, $routing);
         });
     }
 
@@ -114,8 +118,8 @@ final class FormieAdapter implements FormAdapter
                 return;
             }
             $form->settings->disableCaptchas = true;
-            $event->request->submission->title = self::TITLE_PREFIX . $token->run;
-            $form->setSubmissionMetadata([self::METADATA_KEY => ['run' => $token->run, 'mail' => $token->mail, 'probe' => $token->probe]]);
+            $event->request->submission->title = RunRouting::title($token->run);
+            self::routing()->remember($token->run, $token->mail, $token->probe);
             $state['active'] = true;
         });
 
@@ -164,7 +168,7 @@ final class FormieAdapter implements FormAdapter
             'cc' => $notification->cc,
             'bcc' => $notification->bcc,
             'dateCreated' => $notification->dateCreated?->format(DATE_ATOM),
-        ], $sent), self::testOf($submission)['probe'] ?? '', count($submission->getForm()?->getEnabledNotifications() ?? []));
+        ], $sent), self::routing()->of($run)['probe'] ?? '', count($submission->getForm()?->getEnabledNotifications() ?? []));
     }
 
     public function cleanUp(string $run): array
@@ -194,7 +198,7 @@ final class FormieAdapter implements FormAdapter
     /** The run's submission in any state: complete, incomplete or spam. */
     private static function runSubmission(string $run): ?Submission
     {
-        $submission = Submission::find()->title(self::TITLE_PREFIX . $run)->status(null)->isSpam(null)->isIncomplete(null)->one();
+        $submission = Submission::find()->title(RunRouting::title($run))->status(null)->isSpam(null)->isIncomplete(null)->one();
 
         return $submission instanceof Submission ? $submission : null;
     }
@@ -211,25 +215,20 @@ final class FormieAdapter implements FormAdapter
     /** The submission a run made, when the run got as far as a complete one. */
     public static function completedSubmission(string $run): ?Submission
     {
-        $submission = Submission::find()->title(self::TITLE_PREFIX . $run)->status(null)->isSpam(null)->isIncomplete(false)->one();
+        $submission = Submission::find()->title(RunRouting::title($run))->status(null)->isSpam(null)->isIncomplete(false)->one();
 
         return $submission instanceof Submission ? $submission : null;
     }
 
-    /** @return array{run: string, mail: string, probe: string}|null */
-    private static function testOf(Submission $submission): ?array
+    private static function routing(): RunRouting
     {
-        $test = $submission->getMetadata('custom')[self::METADATA_KEY] ?? null;
-
-        return is_array($test) && is_string($test['run'] ?? null) && is_string($test['mail'] ?? null) && is_string($test['probe'] ?? null)
-            ? ['run' => $test['run'], 'mail' => $test['mail'], 'probe' => $test['probe']]
-            : null;
+        return new RunRouting(Craft::$app->getCache());
     }
 
-    /** @param array{run: string, mail: string, probe: string} $test */
-    private static function route(Message $message, array $test): void
+    /** @param array{mail: string, probe: string} $routing */
+    private static function route(Message $message, string $run, array $routing): void
     {
-        $routed = MailRouting::route($test['mail'], $test['probe'], self::addresses($message->getTo()), self::addresses($message->getCc()), self::addresses($message->getBcc()));
+        $routed = MailRouting::route($routing['mail'], $routing['probe'], self::addresses($message->getTo()), self::addresses($message->getCc()), self::addresses($message->getBcc()));
 
         $headers = $message->getSymfonyEmail()->getHeaders();
         $headers->remove('Cc');
@@ -241,7 +240,7 @@ final class FormieAdapter implements FormAdapter
         if ($routed['bcc'] !== []) {
             $message->setBcc($routed['bcc']);
         }
-        $message->setHeader('X-Observer-Run', $test['run']);
+        $message->setHeader('X-Observer-Run', $run);
     }
 
     /**
