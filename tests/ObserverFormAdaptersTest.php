@@ -56,7 +56,7 @@ final class ObserverFormAdaptersTest extends TestCase
             {
             }
 
-            public function report(string $run): ?array
+            public function report(string $run, ?string $probe = null): ?array
             {
                 return null;
             }

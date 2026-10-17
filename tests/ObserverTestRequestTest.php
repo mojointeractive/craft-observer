@@ -38,6 +38,17 @@ final class ObserverTestRequestTest extends TestCase
         self::assertSame('craftlyContact', $token->form);
     }
 
+    public function testATestStartsOnlyWhenItsAdapterIsHere(): void
+    {
+        $token = TestRequest::fromHeader(self::header(1300), self::KEY, 1000);
+
+        self::assertSame('none', TestRequest::decide(null, ['formie']));
+        self::assertSame('start', TestRequest::decide($token, ['formie']));
+        // Formie 3, say: the form would submit like a visitor's and mail the client.
+        self::assertSame('refuse', TestRequest::decide($token, []));
+        self::assertSame('refuse', TestRequest::decide('expired', ['formie']));
+    }
+
     public function testAnExpiredHeaderSaysWhy(): void
     {
         self::assertSame('expired', TestRequest::fromHeader(self::header(900), self::KEY, 1000));

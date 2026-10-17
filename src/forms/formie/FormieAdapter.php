@@ -79,19 +79,18 @@ final class FormieAdapter implements FormAdapter
             }
         });
         Event::on(Emails::class, Emails::EVENT_BEFORE_SEND_MAIL, static function (MailEvent $event): void {
-            $run = RunRouting::runOf($event->submission?->title);
-            if ($run === null) {
+            $decision = self::routing()->decide($event->submission?->title);
+            if ($decision['action'] === 'send') {
                 return;
             }
-            $routing = self::routing()->of($run);
-            if ($routing === null || !$event->email instanceof Message) {
+            if ($decision['action'] === 'hold' || !$event->email instanceof Message) {
                 // Rather no mail than one to the client: Formie saves it as a failed notification.
-                Craft::warning("observer: held back a notification of test run $run, its mail routing is gone.", __METHOD__);
+                Craft::warning("observer: held back a notification of test run {$decision['run']}, its mail routing is gone.", __METHOD__);
                 $event->isValid = false;
 
                 return;
             }
-            self::route($event->email, $run, $routing);
+            self::route($event->email, $decision['run'], ['mail' => $decision['mail'], 'probe' => $decision['probe']]);
         });
     }
 
@@ -144,7 +143,7 @@ final class FormieAdapter implements FormAdapter
         });
     }
 
-    public function report(string $run): ?array
+    public function report(string $run, ?string $probe = null): ?array
     {
         $submission = self::runSubmission($run);
         if ($submission === null) {
@@ -168,7 +167,7 @@ final class FormieAdapter implements FormAdapter
             'cc' => $notification->cc,
             'bcc' => $notification->bcc,
             'dateCreated' => $notification->dateCreated?->format(DATE_ATOM),
-        ], $sent), self::routing()->of($run)['probe'] ?? '', count($submission->getForm()?->getEnabledNotifications() ?? []));
+        ], $sent), $probe ?? self::routing()->of($run)['probe'] ?? '', self::expectedNotifications($submission));
     }
 
     public function cleanUp(string $run): array
@@ -178,7 +177,7 @@ final class FormieAdapter implements FormAdapter
             return ['deleted' => false, 'reason' => 'not found'];
         }
         $sent = self::sentNotifications($submission);
-        $expected = count($submission->getForm()?->getEnabledNotifications() ?? []);
+        $expected = self::expectedNotifications($submission);
         $age = time() - ($submission->dateCreated?->getTimestamp() ?? 0);
         if (count($sent) < $expected && $age < self::PENDING_NOTIFICATIONS_SECONDS) {
             return ['deleted' => false, 'reason' => 'notifications pending'];
@@ -198,7 +197,8 @@ final class FormieAdapter implements FormAdapter
     /** The run's submission in any state: complete, incomplete or spam. */
     private static function runSubmission(string $run): ?Submission
     {
-        $submission = Submission::find()->title(RunRouting::title($run))->status(null)->isSpam(null)->isIncomplete(null)->one();
+        // Every site: a submission belongs to the site its form was sent on (/fr/kontakt, say).
+        $submission = Submission::find()->site('*')->title(RunRouting::title($run))->status(null)->isSpam(null)->isIncomplete(null)->one();
 
         return $submission instanceof Submission ? $submission : null;
     }
@@ -207,7 +207,7 @@ final class FormieAdapter implements FormAdapter
     private static function sentNotifications(Submission $submission): array
     {
         /** @var list<SentNotification> $sent */
-        $sent = SentNotification::find()->submissionId($submission->id)->status(null)->all();
+        $sent = SentNotification::find()->site('*')->submissionId($submission->id)->status(null)->all();
 
         return $sent;
     }
@@ -215,9 +215,20 @@ final class FormieAdapter implements FormAdapter
     /** The submission a run made, when the run got as far as a complete one. */
     public static function completedSubmission(string $run): ?Submission
     {
-        $submission = Submission::find()->title(RunRouting::title($run))->status(null)->isSpam(null)->isIncomplete(false)->one();
+        $submission = Submission::find()->site('*')->title(RunRouting::title($run))->status(null)->isSpam(null)->isIncomplete(false)->one();
 
         return $submission instanceof Submission ? $submission : null;
+    }
+
+    /** The notifications Formie sends for this submission: enabled, and their conditions met. */
+    private static function expectedNotifications(Submission $submission): int
+    {
+        $notifications = Formie::$plugin->getNotifications();
+
+        return count(array_filter(
+            $submission->getForm()?->getEnabledNotifications() ?? [],
+            static fn ($notification): bool => $notifications->evaluateConditions($notification, $submission),
+        ));
     }
 
     private static function routing(): RunRouting

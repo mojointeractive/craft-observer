@@ -42,11 +42,12 @@ interface FormAdapter
 
     /**
      * The run's submission and the notifications sent for it (testing\RunReport::shape()), or null
-     * when the run made no submission.
+     * when the run made no submission. $probe is the run's probe address as observer sends it, to say
+     * whether each notification reached it.
      *
      * @return array<string, mixed>|null
      */
-    public function report(string $run): ?array;
+    public function report(string $run, ?string $probe = null): ?array;
 
     /**
      * Deletes the run's submission and what was sent for it, unless its notifications are still on

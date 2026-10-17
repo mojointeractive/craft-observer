@@ -13,6 +13,7 @@ use mojo\observer\forms\RegisterFormAdaptersEvent;
 use mojo\observer\testing\TestRequest;
 use mojo\observer\testing\TestToken;
 use yii\base\Event;
+use yii\web\ConflictHttpException;
 
 /**
  * mojo observer's connector (README.md): answers observer's signed requests about this install at
@@ -62,11 +63,22 @@ class Observer extends Plugin
         $header = $request->getHeaders()->get(TestRequest::HEADER);
         $settings = self::settings();
         $test = TestRequest::fromHeader(is_string($header) ? $header : null, $settings->apiIsOn() ? $settings->key : null, time());
-        if ($test instanceof TestToken) {
-            ($adapters[$test->adapter] ?? null)?->startTest($test);
-        } elseif (is_string($test)) {
+        $decision = TestRequest::decide($test, array_keys($adapters));
+        if ($decision === 'start' && $test instanceof TestToken) {
+            // The page renders for this run only (no captcha): no shared cache may keep it.
+            /** @var \craft\web\Application $app */
+            $app = Craft::$app;
+            $app->getResponse()->setNoCacheHeaders();
+            $app->getConfig()->getGeneral()->enableTemplateCaching = false;
+            $adapters[$test->adapter]->startTest($test);
+        } elseif ($decision === 'refuse') {
+            $reason = is_string($test) ? $test : "no form adapter \"{$test?->adapter}\" here";
             foreach ($adapters as $adapter) {
-                $adapter->refuseTests($test);
+                $adapter->refuseTests($reason);
+            }
+            // Whatever form plugin takes the post, it must not take it as a visitor's.
+            if ($request->getIsPost()) {
+                throw new ConflictHttpException("observer: this test submits nothing ($reason).");
             }
         }
     }

@@ -38,6 +38,25 @@ final class RunRouting
             : null;
     }
 
+    /**
+     * What happens to a notification of a submission with this title: an ordinary one is sent as
+     * configured, a test's is routed to its probe, and a test's whose routing is gone is held back.
+     *
+     * @return array{action: 'send'}|array{action: 'hold', run: string}|array{action: 'route', run: string, mail: string, probe: string}
+     */
+    public function decide(?string $title): array
+    {
+        $run = self::runOf($title);
+        if ($run === null) {
+            return ['action' => 'send'];
+        }
+        $routing = $this->of($run);
+
+        return $routing === null
+            ? ['action' => 'hold', 'run' => $run]
+            : ['action' => 'route', 'run' => $run, 'mail' => $routing['mail'], 'probe' => $routing['probe']];
+    }
+
     /** The title a run's submission gets. */
     public static function title(string $run): string
     {

@@ -104,12 +104,12 @@ class ApiController extends Controller
         return $this->asJson(HealthReport::fromDoctor($doctor->available() ? $doctor->collect()['checks'] : [], time()));
     }
 
-    /** POST {"run": "<id>", "adapter": "formie"}: the run's submission and notifications, or found: false. */
+    /** POST {"run": "<id>", "adapter": "formie", "probe": "<address>"}: the run's submission and notifications, or found: false. */
     public function actionFormTestRun(): Response
     {
-        [$adapter, $run] = $this->formTestRequest();
+        [$adapter, $run, $probe] = $this->formTestRequest();
 
-        return $this->asJson($adapter->report($run) ?? RunReport::notFound());
+        return $this->asJson($adapter->report($run, $probe) ?? RunReport::notFound());
     }
 
     /** POST {"run": "<id>", "adapter": "formie"}: deletes the run's submission once its mail is out. */
@@ -120,7 +120,7 @@ class ApiController extends Controller
         return $this->asJson($adapter->cleanUp($run));
     }
 
-    /** @return array{FormAdapter, string} */
+    /** @return array{FormAdapter, string, ?string} the adapter, the run and the probe address, if given */
     private function formTestRequest(): array
     {
         $this->requirePostRequest();
@@ -135,7 +135,9 @@ class ApiController extends Controller
             throw new NotFoundHttpException("No form adapter \"$handle\" on this site.");
         }
 
-        return [$adapter, $run];
+        $probe = is_array($body) ? ($body['probe'] ?? null) : null;
+
+        return [$adapter, $run, is_string($probe) && filter_var($probe, FILTER_VALIDATE_EMAIL) !== false ? $probe : null];
     }
 
     public function actionFormieForms(): Response

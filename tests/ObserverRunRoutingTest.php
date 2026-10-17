@@ -31,6 +31,22 @@ final class ObserverRunRoutingTest extends TestCase
         self::assertNull((new RunRouting($cache))->of(self::RUN));
     }
 
+    public function testANotificationIsSentRoutedOrHeldBack(): void
+    {
+        $routing = new RunRouting(new ArrayCache());
+
+        self::assertSame(['action' => 'send'], $routing->decide(null));
+        self::assertSame(['action' => 'send'], $routing->decide('Kontaktanfrage von Anna'));
+        // A test whose routing is gone: rather no mail than one to the form's recipients.
+        self::assertSame(['action' => 'hold', 'run' => self::RUN], $routing->decide('observer:' . self::RUN));
+
+        $routing->remember(self::RUN, 'redirect', self::PROBE);
+        self::assertSame(
+            ['action' => 'route', 'run' => self::RUN, 'mail' => 'redirect', 'probe' => self::PROBE],
+            $routing->decide('observer:' . self::RUN),
+        );
+    }
+
     public function testOnlyAnObserverTitleNamesARun(): void
     {
         self::assertSame(self::RUN, RunRouting::runOf('observer:' . self::RUN));
