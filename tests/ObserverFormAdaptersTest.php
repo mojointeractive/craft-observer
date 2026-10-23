@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use mojo\observer\forms\FormAdapter;
 use mojo\observer\forms\FormAdapters;
+use mojo\observer\forms\formie\FormieAdapter;
 use mojo\observer\forms\RegisterFormAdaptersEvent;
 use mojo\observer\Observer;
 use mojo\observer\providers\CraftlyDoctorProvider;
@@ -86,6 +87,15 @@ final class ObserverFormAdaptersTest extends TestCase
     public function testWithoutListenersThereAreNoAdapters(): void
     {
         self::assertSame([], FormAdapters::all());
+    }
+
+    public function testFormieCompletionIsReportedInTheWordsObserverKnows(): void
+    {
+        self::assertSame('message', FormieAdapter::submitAction('message', 'url'));
+        self::assertSame('entry', FormieAdapter::submitAction('redirect', 'entry'));
+        self::assertSame('url', FormieAdapter::submitAction('redirect', 'url'));
+        self::assertSame('reload', FormieAdapter::submitAction('reload', 'url'));
+        self::assertSame('reset', FormieAdapter::submitAction('reset', 'url'));
     }
 
     public function testTheDoctorIsMissingWithoutCraftly(): void

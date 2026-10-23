@@ -2,7 +2,7 @@
   "name": "mojointeractive/craft-observer",
   "description": "mojo observer's connector for Craft CMS: signed status endpoints, deploy markers and form tests.",
   "type": "craft-plugin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "proprietary",
   "authors": [
     {
@@ -15,7 +15,7 @@
     "craftcms/cms": "^5.11"
   },
   "suggest": {
-    "verbb/formie": "Formie 4 forms appear in observer's inventory and can be tested (^4.0)"
+    "verbb/formie": "Formie 4 forms (4.0.0 or later) appear in observer's inventory and can be tested"
   },
   "autoload": {
     "psr-4": {

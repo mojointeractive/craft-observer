@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace mojo\observer\forms\formie;
 
-use ArrayObject;
 use Craft;
 use craft\db\Query;
 use craft\mail\Message;
@@ -18,18 +17,19 @@ use verbb\formie\base\Captcha;
 use verbb\formie\elements\Form;
 use verbb\formie\elements\SentNotification;
 use verbb\formie\elements\Submission;
+use verbb\formie\enums\CompletionBehavior;
+use verbb\formie\enums\SubmissionOutcomeType;
 use verbb\formie\enums\workflow\Stage;
-use verbb\formie\enums\workflow\Task;
 use verbb\formie\events\MailEvent;
 use verbb\formie\events\ModifyFormIntegrationsEvent;
-use verbb\formie\events\RegisterStageTasksEvent;
 use verbb\formie\events\SubmissionWorkflowStageEvent;
 use verbb\formie\events\TriggerIntegrationEvent;
 use verbb\formie\Formie;
+use verbb\formie\models\Settings as FormieSettings;
 use verbb\formie\services\Emails;
 use verbb\formie\services\Integrations;
 use verbb\formie\services\SubmissionWorkflow;
-use verbb\formie\workflow\tasks\TaskInterface;
+use verbb\formie\workflow\WorkflowContext;
 use yii\base\Event;
 
 /**
@@ -39,8 +39,8 @@ use yii\base\Event;
  */
 final class FormieAdapter implements FormAdapter
 {
-    /** The oldest Formie this adapter knows. */
-    public const MIN_FORMIE_VERSION = '4.0.0-alpha';
+    /** The oldest Formie this adapter knows: 4.0.0 renamed the betas' submission workflow. */
+    public const MIN_FORMIE_VERSION = '4.0.0';
 
     /** How long cleanup waits for queued notifications before deleting anyway. */
     public const PENDING_NOTIFICATIONS_SECONDS = 900;
@@ -96,8 +96,6 @@ final class FormieAdapter implements FormAdapter
 
     public function startTest(TestToken $token): void
     {
-        $state = new ArrayObject(['active' => false]);
-
         // The token's form renders and validates without its captchas (reCAPTCHA among them).
         Event::on(Integrations::class, Integrations::EVENT_MODIFY_FORM_INTEGRATIONS, static function (ModifyFormIntegrationsEvent $event) use ($token): void {
             if ($event->form?->handle === $token->form && $event->integrations !== null) {
@@ -105,42 +103,48 @@ final class FormieAdapter implements FormAdapter
             }
         });
 
-        Event::on(SubmissionWorkflow::class, SubmissionWorkflow::EVENT_BEFORE_STAGE, static function (SubmissionWorkflowStageEvent $event) use ($token, $state): void {
-            if ($event->stage !== Stage::PREPARE->value || $event->request === null) {
+        // A browser fills the honeypot and the start time like a visitor; observer's run is faster than
+        // a person, so the guards are off for this request, with the captchas. Formie checks them before
+        // its workflow, from its settings: changed here in memory, for this request only. A post for
+        // another form passes them too, and its first stage refuses it.
+        $settings = Formie::$plugin->getSettings();
+        if ($settings instanceof FormieSettings) {
+            $settings->enableHoneypot = false;
+            $settings->enableMinimumSubmitTime = false;
+        }
+
+        Event::on(SubmissionWorkflow::class, SubmissionWorkflow::EVENT_BEFORE_STAGE, static function (SubmissionWorkflowStageEvent $event) use ($token): void {
+            if ($event->stage !== Stage::PREFLIGHT->value || $event->command === null || $event->context === null) {
                 return;
             }
-            $form = $event->request->form;
+            $form = $event->command->form;
             if ($form->handle !== $token->form || self::completedSubmission($token->run) !== null) {
                 Craft::warning("observer: refused a test submission for {$form->handle} (token for {$token->form}, run {$token->run}).", __METHOD__);
-                $event->isValid = false;
+                self::reject($event->context);
 
                 return;
             }
-            $form->settings->disableCaptchas = true;
-            $event->request->submission->title = RunRouting::title($token->run);
+            // Not the form's own settings (disableCaptchas): Formie fingerprints them when it accepts a
+            // notification and again in the queue job, and a difference holds the notification back.
+            $event->command->submission->title = RunRouting::title($token->run);
             self::routing()->remember($token->run, $token->mail, $token->probe);
-            $state['active'] = true;
-        });
-
-        // A browser fills the honeypot, the start time and the replay token like a visitor; observer's
-        // run is faster than a person, so the guards are skipped for its form, with the captchas.
-        Event::on(SubmissionWorkflow::class, SubmissionWorkflow::EVENT_REGISTER_STAGE_TASKS, static function (RegisterStageTasksEvent $event) use ($state): void {
-            if ($event->stage !== Stage::SCREEN->value || $state['active'] !== true) {
-                return;
-            }
-            $skipped = [Task::SCREEN_RUN_CAPTCHA_CHECKS->value, Task::SCREEN_RUN_SUBMISSION_GUARDS->value];
-            $event->tasks = array_values(array_filter($event->tasks, static fn (TaskInterface $task): bool => !in_array($task->getName(), $skipped, true)));
         });
     }
 
     public function refuseTests(string $reason): void
     {
         Event::on(SubmissionWorkflow::class, SubmissionWorkflow::EVENT_BEFORE_STAGE, static function (SubmissionWorkflowStageEvent $event) use ($reason): void {
-            if ($event->stage === Stage::PREPARE->value) {
+            if ($event->stage === Stage::PREFLIGHT->value && $event->context !== null) {
                 Craft::warning("observer: refused a submission with an invalid test token ($reason).", __METHOD__);
-                $event->isValid = false;
+                self::reject($event->context);
             }
         });
+    }
+
+    /** With an outcome after its first stage, Formie's workflow saves, mails and triggers nothing. */
+    private static function reject(WorkflowContext $context): void
+    {
+        $context->outcome = $context->result(SubmissionOutcomeType::REJECTED);
     }
 
     public function report(string $run, ?string $probe = null): ?array
@@ -157,7 +161,7 @@ final class FormieAdapter implements FormAdapter
             'isSpam' => $submission->isSpam,
             'spamReason' => $submission->spamReason,
             'isIncomplete' => $submission->isIncomplete,
-            'values' => $submission->getValuesAsArray(),
+            'values' => $submission->getValuesAsString(),
         ], array_map(static fn (SentNotification $notification): array => [
             'name' => $notification->title,
             'subject' => $notification->subject,
@@ -274,6 +278,19 @@ final class FormieAdapter implements FormAdapter
         return $out;
     }
 
+    /**
+     * What a form does once submitted, in the words observer knows (Formie's `submitAction` before
+     * 4.0): message, entry, url, reload or reset. Formie's own migration maps them the other way.
+     */
+    public static function submitAction(string $behavior, string $redirectSource): string
+    {
+        if ($behavior === CompletionBehavior::Redirect->value) {
+            return $redirectSource === 'entry' ? 'entry' : 'url';
+        }
+
+        return $behavior;
+    }
+
     /** @return array<string, mixed> */
     private static function form(Form $form): array
     {
@@ -290,7 +307,7 @@ final class FormieAdapter implements FormAdapter
                 'required' => (bool)$field->required,
             ], $form->getFields())),
             'submitMethod' => $form->settings->submitMethod,
-            'submitAction' => $form->settings->submitAction,
+            'submitAction' => self::submitAction($form->settings->completionBehavior, $form->settings->completionRedirectSource),
             'notifications' => array_values(array_map(static fn ($notification): array => [
                 'handle' => $notification->handle,
                 'name' => $notification->name,
