@@ -10,6 +10,7 @@ use mojo\observer\forms\FormAdapter;
 use mojo\observer\forms\FormAdapters;
 use mojo\observer\health\HealthReport;
 use mojo\observer\Observer;
+use mojo\observer\providers\BackupsProvider;
 use mojo\observer\providers\CraftlyDoctorProvider;
 use mojo\observer\providers\PlatformProvider;
 use mojo\observer\providers\Providers;
@@ -88,6 +89,14 @@ class ApiController extends Controller
     public function actionVitals(): Response
     {
         return $this->asJson(Vitals::collect(Providers::vitals(), time()));
+    }
+
+    /** craft-backup's targets, backups, last run and retention; `{"installed": false}` without the Backup plugin. */
+    public function actionBackups(): Response
+    {
+        $backups = new BackupsProvider();
+
+        return $this->asJson($backups->available() ? $backups->collect() : ['installed' => false]);
     }
 
     public function actionDoctor(): Response

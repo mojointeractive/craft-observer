@@ -57,8 +57,14 @@ Nothing to install: craftly requires this plugin from `plugins/observer` and ins
 
 Every request to `/actions/observer/api/<action>` is signed with `OBSERVER_KEY` (HMAC-SHA256 over method,
 path, timestamp, nonce and body hash; five minutes of clock skew, no nonce twice, 60 requests a minute).
-The actions: `ping`, `vitals`, `doctor`, `health`, `formie-forms`, `form-test-run`, `form-test-cleanup`.
+The actions: `ping`, `vitals`, `backups`, `doctor`, `health`, `formie-forms`, `form-test-run`, `form-test-cleanup`.
 No recipient address leaves the site.
+
+`backups` reports what the Backup plugin (`webhubworks/craft-backup`) knows: each target with its backups
+(time and size), whether it could be listed, free disk where the driver says, the last run and its errors
+per target, the retention config and the `monitor_backups` rules. Target hosts, users, passwords, keys and
+paths stay on the site. The answer is cached 10 minutes; SFTP targets are listed with a 10 s timeout. Without
+the Backup plugin it answers `{"installed": false}`.
 
 ## Form tests
 

@@ -2,7 +2,7 @@
   "name": "mojointeractive/craft-observer",
   "description": "mojo observer's connector for Craft CMS: signed status endpoints, deploy markers and form tests.",
   "type": "craft-plugin",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "license": "proprietary",
   "authors": [
     {
