@@ -104,6 +104,28 @@ final class UpdatesProvider implements Provider
         return $data;
     }
 
+    /**
+     * The newest of the pending releases within the installed major version (a leading "v" ignored),
+     * or null when every pending release is a new major.
+     *
+     * @param list<string> $releaseVersions
+     */
+    public static function latestSameMajor(string $installed, array $releaseVersions): ?string
+    {
+        $major = static fn (string $version): string => explode('.', ltrim($version, 'vV'))[0];
+        $best = null;
+        foreach ($releaseVersions as $version) {
+            if ($major($version) !== $major($installed)) {
+                continue;
+            }
+            if ($best === null || version_compare(ltrim($version, 'vV'), ltrim($best, 'vV'), '>')) {
+                $best = $version;
+            }
+        }
+
+        return $best;
+    }
+
     /** @return array<string, mixed> */
     private static function package(string $handle, string $name, string $installed, ?Update $update, string $license, ?string $changelogUrl): array
     {
@@ -115,6 +137,9 @@ final class UpdatesProvider implements Provider
             'installed' => $installed,
             'latest' => $latest->version ?? $installed,
             'latestDate' => $latest?->date?->format('Y-m-d'),
+            'latestSameMajor' => $update !== null
+                ? self::latestSameMajor($installed, array_map(static fn ($release): string => (string)$release->version, $update->releases))
+                : null,
             'pendingReleases' => $update !== null ? count($update->releases) : 0,
             'critical' => $update?->getHasCritical() ?? false,
             'updateStatus' => $update->status ?? Update::STATUS_ELIGIBLE,

@@ -59,4 +59,14 @@ final class ObserverUpdatesProviderTest extends TestCase
             fetch: static fn (): array => [],
         );
     }
+
+    /** observer tells a maintenance update (same major) from a major one by this. */
+    public function testTheNewestReleaseWithinTheInstalledMajor(): void
+    {
+        self::assertSame('5.14.1', UpdatesProvider::latestSameMajor('5.13.4', ['5.14.1', '6.0.0', '5.14.0']));
+        self::assertSame('v1.7.1', UpdatesProvider::latestSameMajor('v1.4.0', ['v1.7.1', 'v2.0.0']));
+        self::assertSame('4.0.0', UpdatesProvider::latestSameMajor('4.0.0-beta.16', ['4.0.0']));
+        self::assertNull(UpdatesProvider::latestSameMajor('5.0.0', ['6.0.0']));
+        self::assertNull(UpdatesProvider::latestSameMajor('5.0.0', []));
+    }
 }
