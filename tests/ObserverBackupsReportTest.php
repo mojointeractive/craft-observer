@@ -107,6 +107,28 @@ final class ObserverBackupsReportTest extends TestCase
         }
     }
 
+    public function testErrorsNameNoHostUserOrPath(): void
+    {
+        $def = ['driver' => 'sftp', 'host' => 'sftp.example.com', 'username' => 'craft-user', 'root' => '/srv/backups/client'];
+        $report = BackupsReport::build(
+            ['offsite' => $def],
+            self::RETENTION,
+            [],
+            ['lastRun' => [
+                'at' => 1792810000,
+                'status' => 'failed',
+                'errors' => ['offsite: Could not copy backup to /var/www/shared/storage/backups/archives/x.zip'],
+                'targetStatuses' => ['offsite' => 'failed: Unable to connect to host sftp.example.com'],
+            ], 'lastSuccessfulRun' => null],
+            static fn (): array => throw new RuntimeException('Unable to connect to sftp.example.com as craft-user: cannot write /srv/backups/client/x.zip'),
+            self::NOW,
+        );
+
+        self::assertSame('Unable to connect to [host] as [user]: cannot write [path]', $report['targets'][0]['error']);
+        self::assertSame(['offsite: Could not copy backup to [path]'], $report['lastRun']['errors']);
+        self::assertSame(['offsite' => 'failed: Unable to connect to host [host]'], $report['lastRun']['targetStatuses']);
+    }
+
     public function testRetentionIsReportedInObserversTerms(): void
     {
         $report = self::report(['local' => ['driver' => 'local']], self::listing([]));
@@ -165,6 +187,10 @@ final class ObserverBackupsReportTest extends TestCase
         $report = BackupsReport::failed("Encryption is enabled but 'encryption.key' is empty.", ['lastRun' => null, 'lastSuccessfulRun' => null], self::NOW);
 
         self::assertSame("Encryption is enabled but 'encryption.key' is empty.", $report['configError']);
+        self::assertSame(
+            "Invalid local target root: '[path]'.",
+            BackupsReport::failed("Invalid local target root: '/var/www/shared/storage/backups'.", ['lastRun' => null, 'lastSuccessfulRun' => null], self::NOW)['configError'],
+        );
         self::assertSame([], $report['targets']);
         self::assertNull($report['retention']);
         self::assertSame([], $report['rules']);

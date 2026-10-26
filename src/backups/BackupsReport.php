@@ -43,7 +43,7 @@ final class BackupsReport
                     'disk' => $listing['disk'],
                 ];
             } catch (Throwable $e) {
-                $out[] = ['name' => $name, 'driver' => $driver, 'reachable' => false, 'error' => $e->getMessage(), 'backups' => [], 'disk' => null];
+                $out[] = ['name' => $name, 'driver' => $driver, 'reachable' => false, 'error' => self::redact($e->getMessage(), $targets), 'backups' => [], 'disk' => null];
             }
         }
 
@@ -53,7 +53,7 @@ final class BackupsReport
             'targets' => $out,
             'retention' => self::retention($retention),
             'rules' => self::rules($rules),
-        ] + self::runs($runState);
+        ] + self::runs($runState, $targets);
     }
 
     /**
@@ -66,7 +66,7 @@ final class BackupsReport
     {
         return [
             'collectedAt' => self::iso($now),
-            'configError' => $configError,
+            'configError' => self::redact($configError, []),
             'targets' => [],
             'retention' => null,
             'rules' => [],
@@ -130,10 +130,34 @@ final class BackupsReport
     }
 
     /**
+     * Messages from craft-backup and its SFTP library name hosts, users and paths: none of them leaves the site.
+     *
+     * @param array<string, array<string, mixed>> $targets
+     */
+    private static function redact(string $message, array $targets): string
+    {
+        $replace = [];
+        foreach ($targets as $def) {
+            foreach (['host' => '[host]', 'username' => '[user]'] as $key => $placeholder) {
+                if (is_string($def[$key] ?? null) && $def[$key] !== '') {
+                    $replace[$def[$key]] = $placeholder;
+                }
+            }
+        }
+        // Longest first, so a host that contains another value is replaced whole.
+        uksort($replace, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
+        $message = strtr($message, $replace);
+
+        // Absolute paths, roots included: from a slash not after a word character or a colon, to the next space or quote.
+        return (string)preg_replace('#(?<![\w:])/[^\s\'"]+#', '[path]', $message);
+    }
+
+    /**
      * @param array{lastRun: ?array<string, mixed>, lastSuccessfulRun: ?array<string, mixed>} $runState
+     * @param array<string, array<string, mixed>> $targets
      * @return array{lastRun: ?array<string, mixed>, lastSuccessfulRunAt: ?string}
      */
-    private static function runs(array $runState): array
+    private static function runs(array $runState, array $targets = []): array
     {
         $last = $runState['lastRun'];
         $success = $runState['lastSuccessfulRun'];
@@ -142,8 +166,8 @@ final class BackupsReport
             'lastRun' => is_int($last['at'] ?? null) ? [
                 'at' => self::iso($last['at']),
                 'status' => ($last['status'] ?? null) === 'ok' ? 'ok' : 'failed',
-                'errors' => array_values(array_map('strval', (array)($last['errors'] ?? []))),
-                'targetStatuses' => array_map('strval', (array)($last['targetStatuses'] ?? [])),
+                'errors' => array_values(array_map(static fn ($error): string => self::redact((string)$error, $targets), (array)($last['errors'] ?? []))),
+                'targetStatuses' => array_map(static fn ($status): string => self::redact((string)$status, $targets), (array)($last['targetStatuses'] ?? [])),
             ] : null,
             'lastSuccessfulRunAt' => is_int($success['at'] ?? null) ? self::iso($success['at']) : null,
         ];
