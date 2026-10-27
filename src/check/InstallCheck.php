@@ -62,7 +62,10 @@ final class InstallCheck
             : self::line('cache', 'ok', "data cache $cache, shared by web requests and queue workers");
         $blitz = $facts['blitz'] ?? null;
         if (is_string($blitz)) {
-            $lines[] = self::line('blitz', 'ok', "Blitz $blitz: form-test pages bypass its cache");
+            // Blitz's QUERY_STRINGS_CACHE_URLS_AS_SAME_PAGE: a server rewrite onto a file cache then serves the test page from the cache.
+            $lines[] = ($facts['blitzQueryStringCaching'] ?? null) === 2
+                ? self::line('blitz', 'warn', "Blitz $blitz caches URLs with query strings as the same page (queryStringCaching = 2): a file cache served by a server rewrite answers observer's form-test page (?observer-run=…) from the cache, captchas included; set queryStringCaching to 0 or 1")
+                : self::line('blitz', 'ok', "Blitz $blitz: Craft serves a form-test request live and does not store it");
         }
 
         return $lines;

@@ -12,8 +12,9 @@ The plugin's versions; craftly's own CHANGELOG says which craftly release carrie
   doctor's lines where there is one.
 - `craft observer/check [--ping] [--url=…]`: what observer will find on this install, for a site that
   is not on craftly (craftly's `scripts/observer-check.php` prints the same lines).
-- With Blitz installed, a request carrying a form-test token is neither served from nor stored in its
-  cache, whatever its query-string setting.
+- With Blitz installed, Craft neither serves a request carrying a verified form-test token from Blitz's
+  cache nor stores it. A file cache served by a server rewrite never reaches Craft: `craft observer/check`
+  warns when Blitz would cache the test page's query string as the same page.
 
 ### Changed
 

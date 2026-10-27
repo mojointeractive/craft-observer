@@ -87,8 +87,10 @@ the Backup plugin it answers `{"installed": false}`.
 
 observer submits a tested form like a visitor, with an `X-Observer-Test` token signed for one run, one
 form and at most ten minutes. With a valid token only: the page renders uncached and the form renders and
-validates without its captchas (with Blitz installed, the page is neither served from nor stored in its
-cache), Formie's honeypot and minimum-time guards are off for the request, its
+validates without its captchas (with Blitz installed, Craft neither serves that request from Blitz's
+cache nor stores it; a file cache served by a server rewrite never reaches Craft, so there the page's
+`?observer-run=<id>` must not be cached as the same page: `craft observer/check` warns when it would be),
+Formie's honeypot and minimum-time guards are off for the request, its
 integrations do not run, and its notification mail goes to observer's probe inbox (or the probe is added as
 Bcc), each message with `X-Observer-Run`. A request whose token does not verify, or names a form plugin the
 site does not run, submits nothing (409). The routing waits in Craft's data cache for the queue jobs, so

@@ -34,11 +34,12 @@ class Observer extends Plugin
 
         parent::init();
 
-        // Blitz decides at Craft's init whether to serve a cached page: a test request is never one.
+        // Blitz decides at Craft's init whether to serve a cached page: a verified test request is never one.
         $request = Craft::$app->getRequest();
         if ($request instanceof \craft\web\Request && $request->getIsSiteRequest()) {
             $header = $request->getHeaders()->get(TestRequest::HEADER);
-            BlitzGuard::install(is_string($header) ? $header : null);
+            $settings = self::settings();
+            BlitzGuard::install(TestRequest::fromHeader(is_string($header) ? $header : null, $settings->apiIsOn() ? $settings->key : null, time()));
         }
 
         Event::on(self::class, self::EVENT_REGISTER_FORM_ADAPTERS, static function (RegisterFormAdaptersEvent $event): void {

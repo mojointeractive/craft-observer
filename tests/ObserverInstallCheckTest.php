@@ -24,6 +24,7 @@ final class ObserverInstallCheckTest extends TestCase
             'formieSentNotifications' => true,
             'cache' => 'yii\\redis\\Cache',
             'blitz' => '5.14.1',
+            'blitzQueryStringCaching' => 0,
         ];
     }
 
@@ -81,6 +82,15 @@ final class ObserverInstallCheckTest extends TestCase
         self::assertSame('warn', self::statuses(self::facts(['backup' => null]))['backup']);
         self::assertSame('warn', self::statuses(self::facts(['formie' => '3.1.6', 'formieAdapter' => false]))['formie']);
         self::assertSame('warn', self::statuses(self::facts(['formieSentNotifications' => false]))['sent notifications']);
+    }
+
+    public function testBlitzWarnsWhenItCachesQueryStringsAsTheSamePage(): void
+    {
+        self::assertSame('ok', self::statuses(self::facts(['blitzQueryStringCaching' => 1]))['blitz']);
+        $warned = self::statuses(self::facts(['blitzQueryStringCaching' => 2]));
+        self::assertSame('warn', $warned['blitz']);
+        $line = array_values(array_filter(InstallCheck::lines(self::facts(['blitzQueryStringCaching' => 2])), static fn (array $l): bool => $l['subject'] === 'blitz'))[0];
+        self::assertStringContainsString('queryStringCaching', $line['text']);
     }
 
     public function testTheFileCacheIsANoteNotAWarning(): void

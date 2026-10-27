@@ -32,6 +32,14 @@ final class InstallFacts
                 : null;
         }
 
+        $queryStringCaching = null;
+        if ($blitz !== null) {
+            $blitzSettings = $blitz->getSettings();
+            $queryStringCaching = is_object($blitzSettings) && property_exists($blitzSettings, 'queryStringCaching')
+                ? (int)$blitzSettings->queryStringCaching
+                : null;
+        }
+
         return [
             'keyLength' => strlen(trim((string)Settings::envString(App::env('OBSERVER_KEY')))),
             'enabled' => $settings->enabled,
@@ -45,6 +53,7 @@ final class InstallFacts
             'formieSentNotifications' => $sent,
             'cache' => get_class($app->getCache()),
             'blitz' => $blitz !== null && $plugins->isPluginEnabled('blitz') ? $blitz->getVersion() : null,
+            'blitzQueryStringCaching' => $queryStringCaching,
         ];
     }
 }
