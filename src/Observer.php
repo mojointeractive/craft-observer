@@ -10,6 +10,7 @@ use craft\helpers\App;
 use mojo\observer\forms\FormAdapters;
 use mojo\observer\forms\formie\FormieAdapter;
 use mojo\observer\forms\RegisterFormAdaptersEvent;
+use mojo\observer\security\BlitzGuard;
 use mojo\observer\testing\TestRequest;
 use mojo\observer\testing\TestToken;
 use yii\base\Event;
@@ -32,6 +33,13 @@ class Observer extends Plugin
             : 'mojo\\observer\\controllers';
 
         parent::init();
+
+        // Blitz decides at Craft's init whether to serve a cached page: a test request is never one.
+        $request = Craft::$app->getRequest();
+        if ($request instanceof \craft\web\Request && $request->getIsSiteRequest()) {
+            $header = $request->getHeaders()->get(TestRequest::HEADER);
+            BlitzGuard::install(is_string($header) ? $header : null);
+        }
 
         Event::on(self::class, self::EVENT_REGISTER_FORM_ADAPTERS, static function (RegisterFormAdaptersEvent $event): void {
             $event->adapters[] = new FormieAdapter();

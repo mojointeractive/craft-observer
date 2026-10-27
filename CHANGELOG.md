@@ -10,6 +10,10 @@ The plugin's versions; craftly's own CHANGELOG says which craftly release carrie
   content migrations, project-config drift.
 - `health` reports storage, migrations, project config and the queue on every site, then the craftly
   doctor's lines where there is one.
+- `craft observer/check [--ping] [--url=…]`: what observer will find on this install, for a site that
+  is not on craftly (craftly's `scripts/observer-check.php` prints the same lines).
+- With Blitz installed, a request carrying a form-test token is neither served from nor stored in its
+  cache, whatever its query-string setting.
 
 ### Changed
 

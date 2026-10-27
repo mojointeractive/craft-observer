@@ -49,6 +49,10 @@ Nothing to install: craftly requires this plugin from `plugins/observer` and ins
 6. To record deploys, run `php craft observer/deploy-marker` on the server right after each release goes
    live (`--release` names it; by default the directory the `current` symlink points at). It never fails:
    without its variables, or with observer unreachable, it says so and exits 0.
+7. `php craft observer/check --ping` says what observer will find here: the configuration, which plugins
+   it can report on (the Backup plugin, Formie), the data cache, and whether a signed request to `ping`
+   gets through the web server (`--url=<base url>` when the primary site's URL is not reachable from the
+   server itself). It exits 1 while a line is not ok.
 
 ## Environment
 
@@ -83,7 +87,8 @@ the Backup plugin it answers `{"installed": false}`.
 
 observer submits a tested form like a visitor, with an `X-Observer-Test` token signed for one run, one
 form and at most ten minutes. With a valid token only: the page renders uncached and the form renders and
-validates without its captchas, Formie's honeypot and minimum-time guards are off for the request, its
+validates without its captchas (with Blitz installed, the page is neither served from nor stored in its
+cache), Formie's honeypot and minimum-time guards are off for the request, its
 integrations do not run, and its notification mail goes to observer's probe inbox (or the probe is added as
 Bcc), each message with `X-Observer-Run`. A request whose token does not verify, or names a form plugin the
 site does not run, submits nothing (409). The routing waits in Craft's data cache for the queue jobs, so
