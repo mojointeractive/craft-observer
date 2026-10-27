@@ -29,10 +29,31 @@ final class BackupProvider implements Provider
         $root = (string)Craft::getAlias('@storage/backups');
 
         return [
-            'archives' => self::newest(glob($root . '/archives/*') ?: []),
-            'databaseDumps' => self::newest(glob($root . '/*.{sql,zip,gz}', GLOB_BRACE) ?: []),
+            'archives' => self::archives($root),
+            'databaseDumps' => self::databaseDumps($root),
             'offsiteConfigured' => App::env('BACKUP_SFTP_HOST') !== null,
         ];
+    }
+
+    /** @return array{count: int, newestAt: string|null} */
+    public static function archives(string $root): array
+    {
+        return self::newest(glob($root . '/archives/*') ?: []);
+    }
+
+    /**
+     * No GLOB_BRACE: it is undefined on musl builds of PHP (Alpine images).
+     *
+     * @return array{count: int, newestAt: string|null}
+     */
+    public static function databaseDumps(string $root): array
+    {
+        $files = [];
+        foreach (['sql', 'zip', 'gz'] as $extension) {
+            $files = [...$files, ...(glob($root . '/*.' . $extension) ?: [])];
+        }
+
+        return self::newest($files);
     }
 
     /**

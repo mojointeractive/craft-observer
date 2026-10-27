@@ -14,6 +14,8 @@ use mojo\observer\providers\BackupsProvider;
 use mojo\observer\providers\CraftlyDoctorProvider;
 use mojo\observer\providers\PlatformProvider;
 use mojo\observer\providers\Providers;
+use mojo\observer\providers\QueueProvider;
+use mojo\observer\providers\SystemProvider;
 use mojo\observer\security\CacheNonceStore;
 use mojo\observer\security\RequestAuthenticator;
 use mojo\observer\testing\RunReport;
@@ -106,11 +108,17 @@ class ApiController extends Controller
         return $this->asJson($doctor->available() ? $doctor->collect() : ['checks' => []]);
     }
 
+    /** Oh Dear's application-health report: the plugin's own checks, then the craftly doctor's where there is one. */
     public function actionHealth(): Response
     {
         $doctor = new CraftlyDoctorProvider();
 
-        return $this->asJson(HealthReport::fromDoctor($doctor->available() ? $doctor->collect()['checks'] : [], time()));
+        return $this->asJson(HealthReport::build(
+            $doctor->available() ? $doctor->collect()['checks'] : [],
+            (new SystemProvider())->collect(),
+            (new QueueProvider())->collect(),
+            time(),
+        ));
     }
 
     /** POST {"run": "<id>", "adapter": "formie", "probe": "<address>"}: the run's submission and notifications, or found: false. */

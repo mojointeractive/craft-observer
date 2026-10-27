@@ -9,7 +9,14 @@ It is configured by environment variables only and does nothing until `OBSERVER_
 
 ## Requirements
 
-Craft CMS 5.11 or later, PHP 8.2 or later. Forms: Formie 4.0.0 or later (not its betas).
+Craft CMS 5.11 or later, PHP 8.2 or later. Forms: Formie 4.0.0 or later (not its betas). Backups: the
+Backup plugin (`webhubworks/craft-backup`) where observer should watch them.
+
+The site must answer at its domain root with Craft's default `actionTrigger` (`actions`): observer signs
+the paths `/actions/observer/api/<action>` and the Patrol bypass matches exactly those. Nonces, the rate
+counter and the form tests' mail routing live in Craft's data cache, so web requests and queue workers must
+share it (Redis on a host with several nodes; the default file cache is fine on one host). The queue figures
+come from Craft's queue table; a site on another queue driver reports zeros there.
 
 ## On a craftly site
 
@@ -47,7 +54,7 @@ Nothing to install: craftly requires this plugin from `plugins/observer` and ins
 
 | Variable | Meaning |
 |---|---|
-| `OBSERVER_KEY` | The site's key from observer (64 hex characters). The switch: without it every endpoint answers 404. |
+| `OBSERVER_KEY` | The site's key from observer (observer generates 64 hex characters; anything of 32 or more counts). The switch: without it every endpoint answers 404. |
 | `OBSERVER_ENABLED` | `false` turns the plugin off with the key still set. Default `true`. |
 | `OBSERVER_SITE_ID` | observer's id for the site, for deploy markers. |
 | `OBSERVER_HOOK_URL` | observer's deploy hook, for deploy markers. |
@@ -59,6 +66,12 @@ Every request to `/actions/observer/api/<action>` is signed with `OBSERVER_KEY` 
 path, timestamp, nonce and body hash; five minutes of clock skew, no nonce twice, 60 requests a minute).
 The actions: `ping`, `vitals`, `backups`, `doctor`, `health`, `formie-forms`, `form-test-run`, `form-test-cleanup`.
 No recipient address leaves the site.
+
+`vitals` is one entry per provider: the platform (versions, environment, the settings observer watches), the
+updates Craft knows of, the queue, `system` (free space under storage/, pending migrations, project-config
+drift), the newest local backup files, the admin accounts, and the craftly doctor's lines where there is
+one. `health` is the same in Oh Dear's application-health format: storage, migrations, project config and
+the queue on every site, then the doctor's lines; Oh Dear reads it with `OBSERVER_HEALTH_SECRET`.
 
 `backups` reports what the Backup plugin (`webhubworks/craft-backup`) knows: each target with its backups
 (time and size), whether it could be listed, free disk where the driver says, the last run and its errors

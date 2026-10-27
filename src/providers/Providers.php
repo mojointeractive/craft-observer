@@ -16,6 +16,7 @@ final class Providers
             new PlatformProvider(),
             new UpdatesProvider(),
             new QueueProvider(),
+            new SystemProvider(),
             new BackupProvider(),
             new UsersProvider(),
             new CraftlyDoctorProvider(),
