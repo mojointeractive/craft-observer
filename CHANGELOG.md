@@ -15,6 +15,8 @@ The plugin's versions; craftly's own CHANGELOG says which craftly release carrie
 - With Blitz installed, Craft neither serves a request carrying a verified form-test token from Blitz's
   cache nor stores it. A file cache served by a server rewrite never reaches Craft: `craft observer/check`
   warns when Blitz would cache the test page's query string as the same page.
+- Published as its own package: `composer require mojointeractive/craft-observer` from Packagist
+  (`github.com/mojointeractive/craft-observer`, one tag per version), instead of copying the folder.
 
 ### Changed
 

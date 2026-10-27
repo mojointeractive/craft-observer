@@ -4,6 +4,7 @@
   "type": "craft-plugin",
   "version": "1.2.0",
   "license": "proprietary",
+  "homepage": "https://github.com/mojointeractive/craft-observer",
   "authors": [
     {
       "name": "mojo",

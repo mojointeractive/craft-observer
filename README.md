@@ -25,20 +25,13 @@ Nothing to install: craftly requires this plugin from `plugins/observer` and ins
 
 ## On any other Craft 5 site
 
-1. Copy this folder to `plugins/observer` in the project.
-2. Add the path repository and require the plugin in the project's `composer.json`:
-
-   ```json
-   "repositories": [{ "type": "path", "url": "plugins/observer", "options": { "symlink": true } }],
-   "require": { "mojointeractive/craft-observer": "^1.0" }
-   ```
-
-3. `composer update mojointeractive/craft-observer`, then `php craft plugin/install observer`, and commit
-   `composer.json`, `composer.lock`, `plugins/observer` and `config/project` (the install is a project
-   config change, applied on the servers by `php craft up`).
-4. In observer, open the site → **Craft** → **Generate connection key**, and put the lines it shows into
+1. `composer require mojointeractive/craft-observer` (the package is on Packagist, from
+   `github.com/mojointeractive/craft-observer`), then `php craft plugin/install observer`, and commit
+   `composer.json`, `composer.lock` and `config/project` (the install is a project config change, applied
+   on the servers by `php craft up`). Updates are `composer update mojointeractive/craft-observer`.
+2. In observer, open the site → **Craft** → **Generate connection key**, and put the lines it shows into
    the host's `.env`.
-5. If the site uses Patrol's maintenance mode, let observer's requests through, so observer sees the
+3. If the site uses Patrol's maintenance mode, let observer's requests through, so observer sees the
    maintenance instead of an outage:
 
    ```php
@@ -46,13 +39,16 @@ Nothing to install: craftly requires this plugin from `plugins/observer` and ins
        && !\mojo\observer\security\MaintenanceBypass::applies((string)($_SERVER['REQUEST_URI'] ?? '')),
    ```
 
-6. To record deploys, run `php craft observer/deploy-marker` on the server right after each release goes
+4. To record deploys, run `php craft observer/deploy-marker` on the server right after each release goes
    live (`--release` names it; by default the directory the `current` symlink points at). It never fails:
    without its variables, or with observer unreachable, it says so and exits 0.
-7. `php craft observer/check --ping` says what observer will find here: the configuration, which plugins
+5. `php craft observer/check --ping` says what observer will find here: the configuration, which plugins
    it can report on (the Backup plugin, Formie), the data cache, and whether a signed request to `ping`
    gets through the web server (`--url=<base url>` when the primary site's URL is not reachable from the
    server itself). It exits 1 while a line is not ok.
+
+The source of truth is craftly's `plugins/observer`; this repository is published from it read-only
+(`scripts/publish-observer-plugin.sh` in craftly), one tag per version.
 
 ## Environment
 
