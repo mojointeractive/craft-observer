@@ -98,8 +98,40 @@ final class ObserverFormAdaptersTest extends TestCase
         self::assertSame('reset', FormieAdapter::submitAction('reset', 'url'));
     }
 
+    public function testASplitFieldIsFollowedByItsPartsUnderTheKeysFormieRenders(): void
+    {
+        $field = static fn (string $key, bool $required, array $parts = []): object => new ObserverFakeFormField($key, $required, $parts);
+        $fields = [
+            $field('name', false, [$field('name.firstName', false), $field('name.lastName', true)]),
+            $field('email', true),
+            $field('company', false, [$field('company.address', false, [$field('company.address.zip', true)])]),
+        ];
+
+        $lines = FormieAdapter::fields($fields, static fn (object $field): array => $field->parts);
+
+        self::assertSame(
+            ['name', 'name.firstName', 'name.lastName', 'email', 'company', 'company.address', 'company.address.zip'],
+            array_column($lines, 'handle'),
+        );
+        self::assertSame([false, false, true, true, false, false, true], array_column($lines, 'required'));
+        self::assertSame(['handle' => 'name', 'type' => 'ObserverFakeFormField', 'required' => false], $lines[0]);
+    }
+
     public function testTheDoctorIsMissingWithoutCraftly(): void
     {
         self::assertFalse((new CraftlyDoctorProvider('modules\\craftly\\health\\NoSuchDoctor'))->available());
+    }
+}
+
+final class ObserverFakeFormField
+{
+    /** @param array<int, self> $parts */
+    public function __construct(private string $key, public bool $required, public array $parts = [])
+    {
+    }
+
+    public function valueKey(): string
+    {
+        return $this->key;
     }
 }

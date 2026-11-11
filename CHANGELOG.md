@@ -2,6 +2,16 @@
 
 The plugin's versions; craftly's own CHANGELOG says which craftly release carries which.
 
+## 1.3.0 — 2026-11-11
+
+### Changed
+
+- `formie-forms` lists the parts of a field made of parts after the field itself: a Name split into
+  first and last name, an Address, a Group. Each part has the key Formie renders it with
+  (`name.lastName`, the page's `data-formie-field-handle`), its type (`NameLast`) and its own
+  `required`. observer fills the parts: before, a form test put one value into the first part and the
+  form refused the run ("Nachname darf nicht leer sein"). A Repeater and a Date stay one line.
+
 ## 1.2.0 — 2026-10-27
 
 ### Added

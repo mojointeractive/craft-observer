@@ -14,6 +14,10 @@ use mojo\observer\testing\RunReport;
 use mojo\observer\testing\RunRouting;
 use mojo\observer\testing\TestToken;
 use verbb\formie\base\Captcha;
+use verbb\formie\base\FixedParentFieldInterface;
+use verbb\formie\base\ParentField;
+use verbb\formie\base\RepeatableParentFieldInterface;
+use verbb\formie\base\ReportSubfieldsInterface;
 use verbb\formie\elements\Form;
 use verbb\formie\elements\SentNotification;
 use verbb\formie\elements\Submission;
@@ -291,6 +295,51 @@ final class FormieAdapter implements FormAdapter
         return $behavior;
     }
 
+    /**
+     * A form's fields, one line per thing a visitor fills. A field made of parts (a Name split into
+     * first and last name, an Address, a Group) is followed by its parts, each under the key Formie
+     * renders it with (`name.lastName`, the page's `data-formie-field-handle`) and with its own
+     * `required`: observer fills the parts, not the field around them.
+     *
+     * @param array<int, object> $fields Formie fields
+     * @param (callable(object): array<int, object>)|null $parts a field's parts; Formie's by default
+     * @return list<array{handle: string, type: string, required: bool}>
+     */
+    public static function fields(array $fields, ?callable $parts = null): array
+    {
+        $parts ??= self::parts(...);
+        $lines = [];
+        foreach ($fields as $field) {
+            $lines[] = [
+                'handle' => (string)$field->valueKey(),
+                'type' => (new \ReflectionClass($field))->getShortName(),
+                'required' => (bool)$field->required,
+            ];
+            array_push($lines, ...self::fields($parts($field), $parts));
+        }
+
+        return $lines;
+    }
+
+    /**
+     * The enabled parts of a Name or an Address (none for a Name with a single input) and the fields
+     * of a Group. A Repeater's rows exist only once a visitor adds them, and a Date's inputs depend
+     * on how it displays: both stay one line.
+     *
+     * @return array<int, object>
+     */
+    private static function parts(object $field): array
+    {
+        if ($field instanceof ReportSubfieldsInterface) {
+            return $field->getReportSubfields();
+        }
+        if ($field instanceof FixedParentFieldInterface || $field instanceof RepeatableParentFieldInterface) {
+            return [];
+        }
+
+        return $field instanceof ParentField ? $field->getEnabledFields() : [];
+    }
+
     /** @return array<string, mixed> */
     private static function form(Form $form): array
     {
@@ -301,11 +350,7 @@ final class FormieAdapter implements FormAdapter
             'handle' => $form->handle,
             'title' => $form->title,
             'pages' => count($form->getPages()),
-            'fields' => array_values(array_map(static fn ($field): array => [
-                'handle' => $field->handle,
-                'type' => (new \ReflectionClass($field))->getShortName(),
-                'required' => (bool)$field->required,
-            ], $form->getFields())),
+            'fields' => self::fields($form->getFields()),
             'submitMethod' => $form->settings->submitMethod,
             'submitAction' => self::submitAction($form->settings->completionBehavior, $form->settings->completionRedirectSource),
             'notifications' => array_values(array_map(static fn ($notification): array => [
