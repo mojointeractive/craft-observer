@@ -2,7 +2,7 @@
 
 The plugin's versions; craftly's own CHANGELOG says which craftly release carries which.
 
-## 1.4.0 — Unreleased
+## 1.4.0 — 2026-11-13
 
 ### Added
 
