@@ -2,6 +2,17 @@
 
 The plugin's versions; craftly's own CHANGELOG says which craftly release carries which.
 
+## 1.4.0 — Unreleased
+
+### Added
+
+- `packages`: the install's Composer packages from `vendor/composer/installed.json`, each with its name,
+  installed version and whether it is a development requirement. observer matches them against published
+  security advisories. Only names and versions leave the site; a package from a path repository (the
+  project's own code) is left out, one from a private repository is listed by name.
+- `vitals`: each entry of `updates` has `packageName`, the Composer name of Craft (`craftcms/cms`) or of
+  the plugin, so observer can tell which advisory belongs to which plugin.
+
 ## 1.3.0 — 2026-11-11
 
 ### Changed

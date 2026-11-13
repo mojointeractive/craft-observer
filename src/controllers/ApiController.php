@@ -10,6 +10,7 @@ use mojo\observer\forms\FormAdapter;
 use mojo\observer\forms\FormAdapters;
 use mojo\observer\health\HealthReport;
 use mojo\observer\Observer;
+use mojo\observer\packages\PackagesReport;
 use mojo\observer\providers\BackupsProvider;
 use mojo\observer\providers\CraftlyDoctorProvider;
 use mojo\observer\providers\PlatformProvider;
@@ -160,5 +161,11 @@ class ApiController extends Controller
     public function actionFormieForms(): Response
     {
         return $this->asJson(FormAdapters::get('formie')?->inventory() ?? ['forms' => []]);
+    }
+
+    /** The install's Composer packages (name, version, dev requirement), which observer matches against security advisories. */
+    public function actionPackages(): Response
+    {
+        return $this->asJson(PackagesReport::build(PackagesReport::read(Craft::getAlias('@vendor/composer/installed.json'))));
     }
 }

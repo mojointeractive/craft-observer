@@ -64,7 +64,7 @@ The source of truth is craftly's `plugins/observer`; this repository is publishe
 
 Every request to `/actions/observer/api/<action>` is signed with `OBSERVER_KEY` (HMAC-SHA256 over method,
 path, timestamp, nonce and body hash; five minutes of clock skew, no nonce twice, 60 requests a minute).
-The actions: `ping`, `vitals`, `backups`, `doctor`, `health`, `formie-forms`, `form-test-run`, `form-test-cleanup`.
+The actions: `ping`, `vitals`, `backups`, `doctor`, `health`, `formie-forms`, `packages`, `form-test-run`, `form-test-cleanup`.
 No recipient address leaves the site.
 
 `vitals` is one entry per provider: the platform (versions, environment, the settings observer watches), the
@@ -78,6 +78,11 @@ the queue on every site, then the doctor's lines; Oh Dear reads it with `OBSERVE
 per target, the retention config and the `monitor_backups` rules. Target hosts, users, passwords, keys and
 paths stay on the site. The answer is cached 10 minutes; SFTP targets are listed with a 10 s timeout. Without
 the Backup plugin it answers `{"installed": false}`.
+
+`packages` lists the install's Composer packages (name, installed version, development requirement or not)
+from `vendor/composer/installed.json`. observer matches them against published security advisories; only
+names and versions leave the site. A package from a path repository (the project's own code) is left
+out; one from a private repository is listed by name.
 
 ## Form tests
 

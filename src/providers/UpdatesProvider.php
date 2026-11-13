@@ -54,7 +54,7 @@ final class UpdatesProvider implements Provider
             $updates->cms,
             is_array($licenseInfo) ? (string)($licenseInfo['craft']['status'] ?? 'unknown') : 'unknown',
             'https://github.com/craftcms/cms/blob/5.x/CHANGELOG.md',
-        )];
+        ) + ['packageName' => 'craftcms/cms']];
 
         $plugins = $app->getPlugins();
         foreach ($plugins->getAllPluginInfo() as $handle => $info) {
@@ -68,7 +68,10 @@ final class UpdatesProvider implements Provider
                 $updates->plugins[$handle] ?? null,
                 $plugins->getPluginLicenseKeyStatus($handle)->value,
                 $info['changelogUrl'] ?? "https://plugins.craftcms.com/$handle/changelog",
-            ) + ['enabled' => (bool)$info['isEnabled']];
+            ) + [
+                'enabled' => (bool)$info['isEnabled'],
+                'packageName' => is_string($info['packageName'] ?? null) ? strtolower($info['packageName']) : null,
+            ];
         }
 
         return ['refreshed' => $refresh, 'packages' => $packages];
