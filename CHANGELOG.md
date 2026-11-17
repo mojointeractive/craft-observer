@@ -2,6 +2,19 @@
 
 The plugin's versions; craftly's own CHANGELOG says which craftly release carries which.
 
+## 1.5.0 — 2026-11-17
+
+### Added
+
+- `MaintenanceState::$resolver`: a site that switches maintenance on by other means than the
+  `MAINTENANCE` environment variable tells the plugin so, and `ping` and `vitals` report it. craftly
+  5.27 sets it for its own maintenance mode.
+
+### Changed
+
+- The README's maintenance step no longer names the Patrol plugin: any maintenance mode lets the
+  paths `MaintenanceBypass::applies()` accepts through.
+
 ## 1.4.0 — 2026-11-13
 
 ### Added

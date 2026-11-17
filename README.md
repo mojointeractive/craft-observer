@@ -31,13 +31,20 @@ Nothing to install: craftly requires this plugin from `plugins/observer` and ins
    on the servers by `php craft up`). Updates are `composer update mojointeractive/craft-observer`.
 2. In observer, open the site → **Craft** → **Generate connection key**, and put the lines it shows into
    the host's `.env`.
-3. If the site uses Patrol's maintenance mode, let observer's requests through, so observer sees the
-   maintenance instead of an outage:
+3. If the site has a maintenance mode, let observer's requests through and tell the plugin when it is
+   on, so observer sees the maintenance instead of an outage (craftly does both by itself):
 
    ```php
-   'maintenanceModeEnabled' => App::env('MAINTENANCE')
-       && !\mojo\observer\security\MaintenanceBypass::applies((string)($_SERVER['REQUEST_URI'] ?? '')),
+   use mojo\observer\security\MaintenanceBypass;
+   use mojo\observer\security\MaintenanceState;
+
+   // where the maintenance mode decides: this request passes
+   MaintenanceBypass::applies((string)($_SERVER['REQUEST_URI'] ?? ''));
+   // once, at start-up: how to ask
+   MaintenanceState::$resolver = static fn (): bool => $myMaintenance->isActive();
    ```
+
+   Without a resolver the plugin reports the `MAINTENANCE` environment variable.
 
 4. To record deploys, run `php craft observer/deploy-marker` on the server right after each release goes
    live (`--release` names it; by default the directory the `current` symlink points at). It never fails:

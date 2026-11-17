@@ -6,6 +6,7 @@ namespace mojo\observer\providers;
 
 use Craft;
 use craft\helpers\App;
+use mojo\observer\security\MaintenanceState;
 use mojo\observer\vitals\Provider;
 
 /** Versions, environment and the configuration observer watches. */
@@ -43,7 +44,7 @@ final class PlatformProvider implements Provider
             'devMode' => $general->devMode,
             'allowAdminChanges' => $general->allowAdminChanges,
             'systemLive' => $app->getIsLive(),
-            'maintenance' => App::parseBooleanEnv('$MAINTENANCE') ?? false,
+            'maintenance' => MaintenanceState::active(App::parseBooleanEnv('$MAINTENANCE')),
             'sites' => array_map(static fn ($site): array => [
                 'handle' => $site->handle,
                 'name' => $site->getName(),

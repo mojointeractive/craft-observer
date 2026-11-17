@@ -6,7 +6,7 @@ use mojo\observer\security\MaintenanceBypass;
 use PHPUnit\Framework\TestCase;
 
 /**
- * During maintenance only observer's own action paths pass Patrol; a visitor cannot reach the live
+ * During maintenance only observer's own action paths pass; a visitor cannot reach the live
  * site by putting that path anywhere else in the URL.
  */
 final class ObserverMaintenanceBypassTest extends TestCase
