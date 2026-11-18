@@ -68,21 +68,24 @@ final class BackupsProvider implements Provider
             $config->retention,
             $config->monitorBackups,
             $runState,
-            static fn (string $name, array $def): array => self::inspect($def),
+            static fn (string $name, array $def): array => self::inspect($def, $config->name),
             $now,
         );
     }
 
     /**
+     * craft-backup 2.3.5 gives a target the backup name, so it lists only the archives named after
+     * it; earlier versions take one argument and ignore the second.
+     *
      * @param array<string, mixed> $def
      * @return array{backups: list<array{path: string, size: int, modified: int}>, disk: ?array{total: int, free: int}}
      */
-    private static function inspect(array $def): array
+    private static function inspect(array $def, string $backupName): array
     {
         $target = match ($def['driver'] ?? null) {
-            'local' => new LocalTarget($def),
+            'local' => new LocalTarget($def, $backupName),
             // The site's own timeout when shorter; never longer than ours.
-            'sftp' => new SftpTarget(['timeout' => min(self::SFTP_TIMEOUT, (int)($def['timeout'] ?? self::SFTP_TIMEOUT))] + $def),
+            'sftp' => new SftpTarget(['timeout' => min(self::SFTP_TIMEOUT, (int)($def['timeout'] ?? self::SFTP_TIMEOUT))] + $def, $backupName),
             default => throw new RuntimeException('Unknown driver ' . json_encode($def['driver'] ?? null)),
         };
 

@@ -2,6 +2,14 @@
 
 The plugin's versions; craftly's own CHANGELOG says which craftly release carries which.
 
+## 1.5.1 — 2026-11-18
+
+### Fixed
+
+- `backups` with the Backup plugin 2.3.5: its targets now take the backup name, and the report listed
+  every target as unreachable ("Too few arguments …"). The plugin passes the name; 2.3.4 and earlier
+  keep working.
+
 ## 1.5.0 — 2026-11-17
 
 ### Added
