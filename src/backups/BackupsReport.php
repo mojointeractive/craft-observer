@@ -9,21 +9,26 @@ use webhubworks\backup\services\BackupGrouper;
 
 /**
  * What observer learns about a site's backups, from craft-backup's config, its run state and a
- * listing of each target. Each target keeps only its name and driver: hosts, users, passwords,
- * keys and paths stay on the site.
+ * listing of each target: its backups, and (craft-backup 2.6+) its sanitized copies and Craft's own
+ * dumps, kept apart so neither counts as a backup. Each target keeps only its name and driver:
+ * hosts, users, passwords, keys and paths stay on the site, whatever keys a driver's config uses.
  */
 final class BackupsReport
 {
-    /** At most this many backups per target, newest first. */
+    /** At most this many backups (and as many sanitized copies, and Craft dumps) per target, newest first. */
     public const MAX_BACKUPS = 1000;
+
+    /** A config value this short is left in a message: replacing it would garble words that contain it. */
+    private const MIN_REDACTED_LENGTH = 6;
 
     /**
      * @param array<string, array<string, mixed>> $targets craft-backup's `targets`, name ⇒ driver definition
      * @param array<string, mixed> $retention craft-backup's `retention`
      * @param array<int, mixed> $rules craft-backup's `monitor_backups`
      * @param array{lastRun: ?array<string, mixed>, lastSuccessfulRun: ?array<string, mixed>} $runState RunStateStore::read()
-     * @param callable(string, array<string, mixed>): array{backups: list<array{path: string, size: int, modified: int}>, disk: ?array{total: int, free: int}} $inspect
-     *        lists one target; may throw when the target cannot be reached
+     * @param callable(string, array<string, mixed>): array{backups: list<array{path: string, size: int, modified: int}>, sanitized?: ?list<array{path: string, size: int, modified: int}>, craft?: ?list<array{path: string, size: int, modified: int}>, disk: ?array{total: int, free: int}} $inspect
+     *        lists one target (TargetInspector::inspect()); may throw when the target cannot be reached.
+     *        `sanitized` and `craft` are null where the plugin cannot tell them from backups (before 2.6)
      * @return array<string, mixed>
      */
     public static function build(array $targets, array $retention, array $rules, array $runState, callable $inspect, int $now): array
@@ -40,10 +45,21 @@ final class BackupsReport
                     'reachable' => true,
                     'error' => null,
                     'backups' => self::backups($listing['backups']),
+                    'sanitizedCopies' => self::files($listing['sanitized'] ?? null),
+                    'craftDumps' => self::files($listing['craft'] ?? null),
                     'disk' => $listing['disk'],
                 ];
             } catch (Throwable $e) {
-                $out[] = ['name' => $name, 'driver' => $driver, 'reachable' => false, 'error' => self::redact($e->getMessage(), $targets), 'backups' => [], 'disk' => null];
+                $out[] = [
+                    'name' => $name,
+                    'driver' => $driver,
+                    'reachable' => false,
+                    'error' => self::redact($e->getMessage(), $targets),
+                    'backups' => [],
+                    'sanitizedCopies' => null,
+                    'craftDumps' => null,
+                    'disk' => null,
+                ];
             }
         }
 
@@ -89,6 +105,25 @@ final class BackupsReport
     }
 
     /**
+     * Single files, such as sanitized copies and Craft's dumps: no halves to pair.
+     *
+     * @param list<array{path: string, size: int, modified: int}>|null $files
+     * @return list<array{at: string, bytes: int}>|null
+     */
+    private static function files(?array $files): ?array
+    {
+        if ($files === null) {
+            return null;
+        }
+        usort($files, static fn (array $a, array $b): int => $b['modified'] <=> $a['modified']);
+
+        return array_map(
+            static fn (array $file): array => ['at' => self::iso((int)$file['modified']), 'bytes' => (int)$file['size']],
+            array_slice($files, 0, self::MAX_BACKUPS),
+        );
+    }
+
+    /**
      * @param array<string, mixed> $retention
      * @return array{keepAllForDays: int, keepDailyForDays: int, keepWeeklyForWeeks: int, keepMonthlyForMonths: int, keepYearlyForYears: int, sizeCapMb: ?int}
      */
@@ -130,7 +165,10 @@ final class BackupsReport
     }
 
     /**
-     * Messages from craft-backup and its SFTP library name hosts, users and paths: none of them leaves the site.
+     * Messages from craft-backup, its SFTP library and a site's own drivers name hosts, users, buckets,
+     * keys and paths: none of them leaves the site. Every string in a target's definition but the
+     * driver's name is replaced by the name of its key (`host` and `username` as `[host]` and `[user]`);
+     * paths, absolute ones or aliases, by `[path]`.
      *
      * @param array<string, array<string, mixed>> $targets
      */
@@ -138,18 +176,32 @@ final class BackupsReport
     {
         $replace = [];
         foreach ($targets as $def) {
-            foreach (['host' => '[host]', 'username' => '[user]'] as $key => $placeholder) {
-                if (is_string($def[$key] ?? null) && $def[$key] !== '') {
-                    $replace[$def[$key]] = $placeholder;
+            unset($def['driver']);
+            array_walk_recursive($def, static function (mixed $value, int|string $key) use (&$replace): void {
+                if (!is_string($value) || $value === '') {
+                    return;
                 }
-            }
+                $placeholder = match ($key) {
+                    'host' => '[host]',
+                    'username' => '[user]',
+                    default => '[' . $key . ']',
+                };
+                // Paths are left to the pattern below, which also catches the ones no definition names.
+                if (str_starts_with($value, '/') || str_starts_with($value, '@')) {
+                    return;
+                }
+                if ($placeholder === '[host]' || $placeholder === '[user]' || strlen($value) >= self::MIN_REDACTED_LENGTH) {
+                    $replace[$value] = $placeholder;
+                }
+            });
         }
         // Longest first, so a host that contains another value is replaced whole.
         uksort($replace, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
         $message = strtr($message, $replace);
 
-        // Absolute paths, roots included: from a slash not after a word character or a colon, to the next space or quote.
-        return (string)preg_replace('#(?<![\w:])/[^\s\'"]+#', '[path]', $message);
+        // Absolute paths, roots included: from a slash not after a word character, a colon or a placeholder
+        // (`[endpoint]/[bucket]` is no path), to the next space or quote.
+        return (string)preg_replace('#(?<![\w:\]])/[^\s\'"]+#', '[path]', $message);
     }
 
     /**

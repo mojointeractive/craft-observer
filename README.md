@@ -76,15 +76,21 @@ No recipient address leaves the site.
 
 `vitals` is one entry per provider: the platform (versions, environment, the settings observer watches), the
 updates Craft knows of, the queue, `system` (free space under storage/, pending migrations, project-config
-drift), the newest local backup files, the admin accounts, and the craftly doctor's lines where there is
+drift), the newest local backup files (a sanitized copy or an upload still in progress is no backup and is
+counted apart or not at all), the admin accounts, and the craftly doctor's lines where there is
 one. `health` is the same in Oh Dear's application-health format: storage, migrations, project config and
 the queue on every site, then the doctor's lines; Oh Dear reads it with `OBSERVER_HEALTH_SECRET`.
 
-`backups` reports what the Backup plugin (`webhubworks/craft-backup`) knows: each target with its backups
-(time and size), whether it could be listed, free disk where the driver says, the last run and its errors
-per target, the retention config and the `monitor_backups` rules. Target hosts, users, passwords, keys and
-paths stay on the site. The answer is cached 10 minutes; SFTP targets are listed with a 10 s timeout. Without
-the Backup plugin it answers `{"installed": false}`.
+`backups` reports what the Backup plugin (`webhubworks/craft-backup`, 2.3.4 or later) knows: each target with
+its backups (time and size), whether it could be listed, free disk where the driver says, the last run and its
+errors per target, the retention config and the `monitor_backups` rules. From Backup 2.6 on each target also
+lists its sanitized copies (`sanitizedCopies`) and the dumps of Craft's own Backup button (`craftDumps`),
+apart from its backups; with an earlier version, which cannot tell them apart, both are `null`. From Backup
+2.5 on a target is built by the plugin's own factory, so a driver the site registers
+(`BackupRunner::EVENT_REGISTER_TARGET_DRIVERS`) is listed too; before it only `local` and `sftp` are. Target
+hosts, users, passwords, keys and paths stay on the site, whatever keys a driver's config uses: an error
+message names them by their keys. The answer is cached 10 minutes; SFTP targets are listed with a 10 s
+timeout. Without the Backup plugin it answers `{"installed": false}`.
 
 `packages` lists the install's Composer packages (name, installed version, development requirement or not)
 from `vendor/composer/installed.json`. observer matches them against published security advisories; only

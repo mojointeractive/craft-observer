@@ -6,24 +6,23 @@ namespace mojo\observer\providers;
 
 use Craft;
 use mojo\observer\backups\BackupsReport;
+use mojo\observer\backups\TargetInspector;
 use mojo\observer\vitals\Provider;
-use RuntimeException;
 use Throwable;
 use webhubworks\backup\models\BackupConfig;
 use webhubworks\backup\Plugin as BackupPlugin;
-use webhubworks\backup\services\targets\LocalTarget;
-use webhubworks\backup\services\targets\SftpTarget;
 
 /**
- * craft-backup's view of the site's backups for the `backups` action: every target listed (SFTP with a
- * short timeout, so an unreachable host costs seconds, not the request), the last run, the retention
- * config. Kept 10 minutes in Craft's cache, because listing a remote target is slow. Not part of vitals.
+ * craft-backup's view of the site's backups for the `backups` action: every target listed with its
+ * backups, sanitized copies and Craft's own dumps (TargetInspector: SFTP with a short timeout, so an
+ * unreachable host costs seconds, not the request; whichever plugin version is installed), the last
+ * run, the retention config. Kept 10 minutes in Craft's cache, because listing a remote target is
+ * slow. Not part of vitals.
  */
 final class BackupsProvider implements Provider
 {
     private const CACHE_KEY = 'observer:backups';
     private const CACHE_SECONDS = 600;
-    private const SFTP_TIMEOUT = 10;
 
     public function key(): string
     {
@@ -63,33 +62,16 @@ final class BackupsProvider implements Provider
             return BackupsReport::failed($e->getMessage(), $runState, $now);
         }
 
+        $inspector = TargetInspector::forInstalledPlugin();
+
         return BackupsReport::build(
             $config->targets,
             $config->retention,
             $config->monitorBackups,
             $runState,
-            static fn (string $name, array $def): array => self::inspect($def, $config->name),
+            static fn (string $name, array $def): array => $inspector->inspect($def, $config->name),
             $now,
         );
-    }
-
-    /**
-     * craft-backup 2.3.5 gives a target the backup name, so it lists only the archives named after
-     * it; earlier versions take one argument and ignore the second.
-     *
-     * @param array<string, mixed> $def
-     * @return array{backups: list<array{path: string, size: int, modified: int}>, disk: ?array{total: int, free: int}}
-     */
-    private static function inspect(array $def, string $backupName): array
-    {
-        $target = match ($def['driver'] ?? null) {
-            'local' => new LocalTarget($def, $backupName),
-            // The site's own timeout when shorter; never longer than ours.
-            'sftp' => new SftpTarget(['timeout' => min(self::SFTP_TIMEOUT, (int)($def['timeout'] ?? self::SFTP_TIMEOUT))] + $def, $backupName),
-            default => throw new RuntimeException('Unknown driver ' . json_encode($def['driver'] ?? null)),
-        };
-
-        return ['backups' => array_values($target->list()), 'disk' => $target->diskUsage()];
     }
 
     /** The Backup plugin, when it is installed and enabled. */

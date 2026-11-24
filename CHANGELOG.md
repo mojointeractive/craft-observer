@@ -2,6 +2,27 @@
 
 The plugin's versions; craftly's own CHANGELOG says which craftly release carries which.
 
+## 1.6.0 — 2026-11-24
+
+### Added
+
+- `backups` with the Backup plugin 2.6 or later: each target lists its sanitized copies (`sanitizedCopies`)
+  and the dumps of Craft's own Backup button (`craftDumps`), time and size, apart from its backups. With an
+  earlier version both are `null`: it cannot tell them from backups.
+- `backups` with the Backup plugin 2.5 or later: targets are built by the plugin's own `TargetFactory`, so a
+  driver the site registers through `BackupRunner::EVENT_REGISTER_TARGET_DRIVERS` is listed like `local` and
+  `sftp` (it answered "Unknown driver"). SFTP targets keep the 10 s timeout.
+- `vitals` → `backup`: `sanitizedCopies`, the count and age of the sanitized copies beside the local archives.
+
+### Fixed
+
+- `vitals` → `backup`: a sanitized copy (Backup 2.6) and an upload still in progress (`.part`, Backup 2.3.5)
+  counted as local archives, so the newest archive could be a copy for developers or half a file.
+- `backups`: an error message from a target names none of the target's config values, whatever its keys
+  (a bucket, an access key, an endpoint); it hid only the host, the user and paths.
+
+All of it works with the Backup plugin 2.3.4 to 2.6.0; each version was checked on a live install.
+
 ## 1.5.1 — 2026-11-18
 
 ### Fixed

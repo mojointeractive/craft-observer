@@ -85,7 +85,7 @@ final class ObserverBackupsReportTest extends TestCase
         self::assertSame(['local', 'offsite'], array_column($report['targets'], 'name'));
         self::assertCount(1, $report['targets'][0]['backups']);
         self::assertSame(
-            ['name' => 'offsite', 'driver' => 'sftp', 'reachable' => false, 'error' => 'Connection timed out', 'backups' => [], 'disk' => null],
+            ['name' => 'offsite', 'driver' => 'sftp', 'reachable' => false, 'error' => 'Connection timed out', 'backups' => [], 'sanitizedCopies' => null, 'craftDumps' => null, 'disk' => null],
             $report['targets'][1],
         );
     }
@@ -127,6 +127,71 @@ final class ObserverBackupsReportTest extends TestCase
         self::assertSame('Unable to connect to [host] as [user]: cannot write [path]', $report['targets'][0]['error']);
         self::assertSame(['offsite: Could not copy backup to [path]'], $report['lastRun']['errors']);
         self::assertSame(['offsite' => 'failed: Unable to connect to host [host]'], $report['lastRun']['targetStatuses']);
+    }
+
+    public function testSanitizedCopiesAndCraftDumpsAreListedApartFromBackups(): void
+    {
+        $report = self::report(['local' => ['driver' => 'local']], static fn (): array => [
+            'backups' => [['path' => '/x/craft-backup-2026-10-24_03-00-00-a1b2c3d4.zip', 'size' => 10, 'modified' => 1792800000]],
+            'sanitized' => [['path' => '/x/craft-backup-2026-10-24_09-00-00-b1b2c3d4-sanitized.zip', 'size' => 4, 'modified' => 1792821600]],
+            'craft' => [
+                ['path' => '/x/craftly--2026-10-20-140118--v5.12.1.sql.zip', 'size' => 7, 'modified' => 1792500000],
+                ['path' => '/x/craftly--2026-10-24-140118--v5.12.2.sql.zip', 'size' => 8, 'modified' => 1792850000],
+            ],
+            'disk' => null,
+        ]);
+        $target = $report['targets'][0];
+
+        self::assertSame([['at' => gmdate('Y-m-d\TH:i:s\Z', 1792800000), 'bytes' => 10]], $target['backups']);
+        self::assertSame([['at' => gmdate('Y-m-d\TH:i:s\Z', 1792821600), 'bytes' => 4]], $target['sanitizedCopies']);
+        self::assertSame([
+            ['at' => gmdate('Y-m-d\TH:i:s\Z', 1792850000), 'bytes' => 8],
+            ['at' => gmdate('Y-m-d\TH:i:s\Z', 1792500000), 'bytes' => 7],
+        ], $target['craftDumps'], 'newest first');
+    }
+
+    public function testAPluginThatCannotTellCopiesFromBackupsReportsNoneAsNull(): void
+    {
+        // craft-backup before 2.6: the inspector has no `sanitized` or `craft` list to give.
+        $target = self::report(['local' => ['driver' => 'local']], self::listing([]))['targets'][0];
+
+        self::assertNull($target['sanitizedCopies']);
+        self::assertNull($target['craftDumps']);
+
+        $none = self::report(['local' => ['driver' => 'local']], static fn (): array => ['backups' => [], 'sanitized' => [], 'craft' => [], 'disk' => null])['targets'][0];
+        self::assertSame([], $none['sanitizedCopies'], 'a 2.6 target without copies has an empty list, not null');
+        self::assertSame([], $none['craftDumps']);
+    }
+
+    public function testACustomDriversConfigStaysOnTheSiteWhateverItsKeys(): void
+    {
+        $def = [
+            'driver' => 's3-archive',
+            'bucket' => 'client-backups-eu',
+            'key' => 'AKIAEXAMPLEKEY',
+            'secret' => 'wJalrXUtnFEMI/K7MDENG',
+            'region' => 'eu',
+            'options' => ['endpoint' => 'https://s3.example-storage.com'],
+            'root' => '/srv/backups/client',
+        ];
+        $report = BackupsReport::build(
+            ['offsite' => $def],
+            self::RETENTION,
+            [],
+            ['lastRun' => [
+                'at' => 1792810000,
+                'status' => 'failed',
+                'errors' => ['target offsite: AccessDenied for AKIAEXAMPLEKEY on client-backups-eu'],
+                'targetStatuses' => ['offsite' => 'failed: signature wJalrXUtnFEMI/K7MDENG rejected'],
+            ], 'lastSuccessfulRun' => null],
+            static fn (): array => throw new RuntimeException('Could not reach https://s3.example-storage.com/client-backups-eu (eu): cannot write /srv/backups/client/x.zip'),
+            self::NOW,
+        );
+
+        self::assertSame('s3-archive', $report['targets'][0]['driver']);
+        self::assertSame('Could not reach [endpoint]/[bucket] (eu): cannot write [path]', $report['targets'][0]['error']);
+        self::assertSame(['target offsite: AccessDenied for [key] on [bucket]'], $report['lastRun']['errors']);
+        self::assertSame(['offsite' => 'failed: signature [secret] rejected'], $report['lastRun']['targetStatuses']);
     }
 
     public function testRetentionIsReportedInObserversTerms(): void
